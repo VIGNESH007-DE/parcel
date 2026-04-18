@@ -5,12 +5,13 @@ import { getFirestore } from "firebase/firestore";
 // Replace these with your actual Firebase config if you have one
 // For this demo, we'll use placeholder values that you can replace
 const firebaseConfig = {
-  apiKey: "demo-api-key",
-  authDomain: "ride-share-parcel.firebaseapp.com",
-  projectId: "ride-share-parcel",
-  storageBucket: "ride-share-parcel.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abcdef123456"
+  apiKey: "AIzaSyCl1dwvVe--1DWK6jYExFJOBtQggiyvFxc",
+  authDomain: "back-ride.firebaseapp.com",
+  projectId: "back-ride",
+  storageBucket: "back-ride.firebasestorage.app",
+  messagingSenderId: "848393297300",
+  appId: "1:848393297300:web:09319cab09aad796c2c381",
+  measurementId: "G-NE0Q13YRMF"
 };
 
 const app = initializeApp(firebaseConfig);
