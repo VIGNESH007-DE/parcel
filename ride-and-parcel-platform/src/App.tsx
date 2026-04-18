@@ -44,18 +44,19 @@ interface Booking {
   driverPhone?: string;
 }
 
-interface Parcel {
+interface PickupRoute {
   id: string;
-  senderId: string;
+  driverId: string;
+  driverName: string;
+  driverPhone: string;
+  startLocation: string;
+  endLocation: string;
+  price: number;
+  status: 'active' | 'booked' | 'delivered';
+  senderId?: string;
   senderName?: string;
   senderPhone?: string;
-  driverId?: string;
-  pickupLocation: string;
-  dropLocation: string;
-  parcelDetails: string;
-  status: 'pending' | 'accepted' | 'picked_up' | 'delivered';
-  driverName?: string;
-  driverPhone?: string;
+  parcelDetails?: string;
 }
 
 // --- Components ---
@@ -617,199 +618,201 @@ const DriverDashboard = () => {
   );
 };
 
-const ParcelDashboard = () => {
-  const [showAdd, setShowAdd] = useState(false);
-  const [parcels, setParcels] = useState<Parcel[]>([]);
+const SenderDashboard = () => {
+  const [pickup, setPickup] = useState('');
+  const [drop, setDrop] = useState('');
+  const [routes, setRoutes] = useState<PickupRoute[]>([]);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [activeParcels, setActiveParcels] = useState<PickupRoute[]>([]);
   const { user, profile } = useAuth();
-
-  // Parcel Form State
-  const [pLoc, setPLoc] = useState('');
-  const [dLoc, setDLoc] = useState('');
-  const [details, setDetails] = useState('');
+  
+  const [parcelDetails, setParcelDetails] = useState('');
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, 'parcels'));
+    const q = query(collection(db, 'pickup_routes'), where('senderId', '==', user.uid));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setParcels(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Parcel)));
+      setActiveParcels(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PickupRoute)));
     });
     return () => unsubscribe();
   }, [user]);
 
-  const addParcel = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const searchRoutes = async () => {
+    setHasSearched(true);
+    const q = query(collection(db, 'pickup_routes'), where('status', '==', 'active'));
+    const snapshot = await getDocs(q);
+    const results = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PickupRoute));
+    if (pickup || drop) {
+      setRoutes(results.filter(r => 
+        r.startLocation.toLowerCase().includes(pickup.toLowerCase()) || 
+        r.endLocation.toLowerCase().includes(drop.toLowerCase())
+      ));
+    } else {
+      setRoutes(results);
+    }
+  };
+
+  const acceptPickup = async (route: PickupRoute) => {
     if (!user || !profile) return;
+    if (!parcelDetails) return alert('Please enter parcel details first!');
     try {
-      await addDoc(collection(db, 'parcels'), {
+      await updateDoc(doc(db, 'pickup_routes', route.id), {
+        status: 'booked',
         senderId: user.uid,
         senderName: profile.name,
         senderPhone: profile.phone,
-        pickupLocation: pLoc,
-        dropLocation: dLoc,
-        parcelDetails: details,
-        status: 'pending',
-        createdAt: Timestamp.now()
+        parcelDetails
       });
-      setShowAdd(false); setPLoc(''); setDLoc(''); setDetails('');
-    } catch (e) { console.error(e); }
+      alert('Pickup accepted!');
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const acceptParcel = async (parcel: Parcel) => {
+  return (
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+        <h2 className="text-2xl font-bold text-gray-900 mb-6">Find a Parcel Pickup</h2>
+        <div className="grid md:grid-cols-2 gap-4 mb-4">
+          <input type="text" placeholder="Pickup Location" className="w-full px-5 py-4 bg-gray-50 rounded-2xl outline-none" value={pickup} onChange={(e) => setPickup(e.target.value)} />
+          <input type="text" placeholder="Drop Location" className="w-full px-5 py-4 bg-gray-50 rounded-2xl outline-none" value={drop} onChange={(e) => setDrop(e.target.value)} />
+        </div>
+        <textarea placeholder="Describe the parcel to send..." className="w-full px-5 py-4 bg-gray-50 rounded-2xl outline-none mb-4" value={parcelDetails} onChange={(e) => setParcelDetails(e.target.value)} />
+        <button onClick={searchRoutes} className="w-full bg-indigo-600 text-white font-bold py-4 rounded-2xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-2">
+          <Search className="w-5 h-5" /> Search Pickups
+        </button>
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2 space-y-4">
+          <h3 className="text-xl font-bold text-gray-900 px-1">Available Pickups</h3>
+          {hasSearched ? (
+            routes.length > 0 ? (
+              routes.map(r => (
+                <div key={r.id} className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 flex flex-col gap-4">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h4 className="font-bold text-gray-900">{r.driverName}</h4>
+                      <p className="text-sm text-gray-500">{r.startLocation} to {r.endLocation}</p>
+                    </div>
+                    <p className="text-xl font-bold text-indigo-600">${r.price}</p>
+                  </div>
+                  <button onClick={() => acceptPickup(r)} className="bg-gray-900 text-white py-3 rounded-xl font-bold hover:bg-black w-full">
+                    Accept this Pickup
+                  </button>
+                </div>
+              ))
+            ) : <p className="text-gray-500">No pickups found</p>
+          ) : <p className="text-gray-400">Search to see pickups</p>}
+        </div>
+
+        <div className="space-y-6">
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+            <h3 className="font-bold text-gray-900 mb-4">Your Active Parcels</h3>
+            <div className="space-y-4">
+              {activeParcels.filter(p => p.status !== 'delivered').map(p => (
+                <div key={p.id} className="p-4 rounded-2xl border border-gray-100 bg-gray-50">
+                  <span className="text-[10px] font-bold uppercase bg-amber-100 text-amber-700 px-2 py-1 rounded-full">{p.status}</span>
+                  <p className="text-sm font-semibold mt-2">{p.parcelDetails}</p>
+                  <p className="text-xs text-gray-500">To: {p.endLocation}</p>
+                  <div className="mt-3 flex items-center gap-2 text-indigo-700 font-bold text-sm">
+                     <Phone className="w-4 h-4"/> Driver: {p.driverPhone}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const PickupDashboard = () => {
+  const [showAdd, setShowAdd] = useState(false);
+  const [routes, setRoutes] = useState<PickupRoute[]>([]);
+  const { user, profile } = useAuth();
+
+  const [startLoc, setStartLoc] = useState('');
+  const [endLoc, setEndLoc] = useState('');
+  const [price, setPrice] = useState<number>(5);
+
+  useEffect(() => {
+    if (!user) return;
+    const q = query(collection(db, 'pickup_routes'), where('driverId', '==', user.uid));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setRoutes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PickupRoute)));
+    });
+    return () => unsubscribe();
+  }, [user]);
+
+  const addRoute = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!user || !profile) return;
     try {
-      await updateDoc(doc(db, 'parcels', parcel.id), {
+      await addDoc(collection(db, 'pickup_routes'), {
         driverId: user.uid,
         driverName: profile.name,
         driverPhone: profile.phone,
-        status: 'accepted'
+        startLocation: startLoc,
+        endLocation: endLoc,
+        price,
+        status: 'active',
       });
+      setShowAdd(false); setStartLoc(''); setEndLoc('');
     } catch (e) { console.error(e); }
   };
 
   const markDelivered = async (id: string) => {
     try {
-      await updateDoc(doc(db, 'parcels', id), { status: 'delivered' });
+      await updateDoc(doc(db, 'pickup_routes', id), { status: 'delivered' });
     } catch (e) { console.error(e); }
   };
 
-  const userParcels = parcels.filter(p => (p.senderId === user?.uid || p.driverId === user?.uid) && p.status !== 'delivered');
-  const availableParcels = parcels.filter(p => p.status === 'pending');
-
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Parcel Service</h2>
-          <p className="text-gray-500 mt-1">Send items or deliver for others</p>
-        </div>
-        <button 
-          onClick={() => setShowAdd(!showAdd)}
-          className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center gap-2"
-        >
-          {showAdd ? <XCircle className="w-5 h-5" /> : <Package className="w-5 h-5" />}
-          {showAdd ? 'Cancel' : 'Send a Parcel'}
+      <div className="flex justify-between items-center">
+        <h2 className="text-3xl font-extrabold text-gray-900">Pickup Driver</h2>
+        <button onClick={() => setShowAdd(!showAdd)} className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2">
+          {showAdd ? <XCircle className="w-5 h-5"/> : <Package className="w-5 h-5"/>} Set Route
         </button>
       </div>
 
       {showAdd && (
-        <div className="bg-white p-8 rounded-3xl shadow-xl border border-gray-100">
-          <form onSubmit={addParcel} className="space-y-6">
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-700">Pickup Location</label>
-                <input required placeholder="House No, Street, City" className="w-full px-5 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-600 transition-all outline-none" value={pLoc} onChange={e=>setPLoc(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-700">Drop-off Location</label>
-                <input required placeholder="Destination address" className="w-full px-5 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-600 transition-all outline-none" value={dLoc} onChange={e=>setDLoc(e.target.value)} />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-gray-700">Parcel Description</label>
-              <textarea required placeholder="What are we delivering? (e.g. Small box, documents)" className="w-full px-5 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-600 transition-all outline-none min-h-[100px]" value={details} onChange={e=>setDetails(e.target.value)} />
-            </div>
-            <button className="w-full bg-indigo-600 text-white font-bold py-5 rounded-2xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200">
-              Request Pickup
-            </button>
-          </form>
-        </div>
+        <form onSubmit={addRoute} className="bg-white p-6 rounded-3xl shadow-sm border space-y-4">
+          <div className="grid md:grid-cols-2 gap-4">
+            <input required placeholder="From Location" className="px-5 py-4 bg-gray-50 rounded-2xl outline-none" value={startLoc} onChange={e=>setStartLoc(e.target.value)} />
+            <input required placeholder="To Location" className="px-5 py-4 bg-gray-50 rounded-2xl outline-none" value={endLoc} onChange={e=>setEndLoc(e.target.value)} />
+          </div>
+          <div className="w-1/2">
+             <label className="text-sm font-bold ml-1">Price ($)</label>
+             <input type="number" required className="w-full px-5 py-4 bg-gray-50 rounded-2xl outline-none mt-1" value={price} onChange={e=>setPrice(Number(e.target.value))} />
+          </div>
+          <button className="w-full bg-indigo-600 text-white font-bold py-4 rounded-2xl">Publish Route</button>
+        </form>
       )}
 
-      <div className="grid lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-6">
-          <h3 className="text-xl font-bold text-gray-900 px-1">Active Deliveries</h3>
-          <div className="grid sm:grid-cols-2 gap-4">
-            {userParcels.length > 0 ? userParcels.map(p => (
-              <div key={p.id} className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-                <div className="flex justify-between items-center mb-4">
-                  <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest ${
-                    p.status === 'delivered' ? 'bg-emerald-100 text-emerald-600' : 'bg-indigo-100 text-indigo-600'
-                  }`}>
-                    {p.status.replace('_', ' ')}
-                  </span>
-                  <span className="text-[10px] font-bold text-gray-400">ID: {p.id.slice(0, 6)}</span>
+      <div className="grid sm:grid-cols-2 gap-6">
+        {routes.filter(r => r.status !== 'delivered').map(r => (
+          <div key={r.id} className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 relative">
+            <span className={`absolute top-4 right-4 px-3 py-1 rounded-full text-xs font-bold uppercase ${r.status === 'booked' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>{r.status}</span>
+            <div className="flex justify-between">
+              <h3 className="font-bold text-gray-900">{r.startLocation} → {r.endLocation}</h3>
+            </div>
+            <p className="text-lg font-extrabold text-indigo-600 mt-2">${r.price}</p>
+            {r.status === 'booked' && (
+              <div className="mt-4 pt-4 border-t border-gray-100 space-y-3">
+                <p className="text-sm"><strong>Parcel:</strong> {r.parcelDetails}</p>
+                <div className="flex items-center gap-2 text-emerald-600 font-bold text-sm">
+                  <Phone className="w-4 h-4"/> Sender: {r.senderPhone} ({r.senderName})
                 </div>
-                <p className="font-bold text-gray-900 mb-4">{p.parcelDetails}</p>
-                <div className="space-y-3 text-sm text-gray-500">
-                  <div className="flex gap-2">
-                    <MapPin className="w-4 h-4 text-indigo-500 flex-shrink-0" />
-                    <span className="truncate">{p.pickupLocation}</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <Navigation className="w-4 h-4 text-purple-500 flex-shrink-0" />
-                    <span className="truncate">{p.dropLocation}</span>
-                  </div>
-                </div>
-                {p.driverPhone && p.senderId === user?.uid && (
-                  <div className="mt-6 pt-4 border-t border-gray-50 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600">
-                        <User className="w-4 h-4" />
-                      </div>
-                      <span className="text-xs font-bold text-gray-700">Driver: {p.driverName}</span>
-                    </div>
-                    <a href={`tel:${p.driverPhone}`} className="text-indigo-600 hover:text-indigo-700">
-                      <Phone className="w-5 h-5" />
-                    </a>
-                  </div>
-                )}
-                {p.senderPhone && p.driverId === user?.uid && (
-                  <div className="mt-6 pt-4 border-t border-gray-50 flex flex-col gap-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-emerald-50 rounded-lg flex items-center justify-center text-emerald-600">
-                          <User className="w-4 h-4" />
-                        </div>
-                        <span className="text-xs font-bold text-gray-700">Sender: {p.senderName}</span>
-                      </div>
-                      <a href={`tel:${p.senderPhone}`} className="text-emerald-600 hover:text-emerald-700">
-                        <Phone className="w-5 h-5" />
-                      </a>
-                    </div>
-                    <button 
-                      onClick={() => markDelivered(p.id)}
-                      className="w-full bg-emerald-600 text-white py-2 rounded-xl text-xs font-bold hover:bg-emerald-700 transition-all flex items-center justify-center gap-2"
-                    >
-                      <CheckCircle2 className="w-4 h-4" /> Mark as Delivered
-                    </button>
-                  </div>
-                )}
-              </div>
-            )) : (
-              <div className="col-span-full py-16 text-center bg-gray-50 rounded-3xl border border-dashed border-gray-200">
-                <p className="text-gray-400 font-medium">No active deliveries</p>
+                <button onClick={() => markDelivered(r.id)} className="w-full bg-emerald-500 text-white py-2 rounded-xl text-sm font-bold flex justify-center items-center gap-2 hover:bg-emerald-600">
+                  <CheckCircle2 className="w-4 h-4" /> Mark Delivered
+                </button>
               </div>
             )}
           </div>
-        </div>
-
-        <div className="space-y-6">
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-            <h3 className="font-bold text-gray-900 mb-6 flex items-center gap-2">
-              <Package className="w-5 h-5 text-indigo-600" />
-              Available for Pickup
-            </h3>
-            <div className="space-y-4">
-              {availableParcels.length > 0 ? availableParcels.map(p => (
-                <div key={p.id} className="p-5 rounded-2xl bg-gray-50 border border-gray-100">
-                  <p className="text-sm font-bold text-gray-900 mb-3">{p.parcelDetails}</p>
-                  <p className="text-xs text-gray-500 mb-4 line-clamp-2">To: {p.dropLocation}</p>
-                  <button 
-                    onClick={() => acceptParcel(p)}
-                    className="w-full bg-indigo-600 text-white py-2.5 rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all"
-                  >
-                    Accept Delivery
-                  </button>
-                </div>
-              )) : (
-                <div className="text-center py-10">
-                  <p className="text-xs text-gray-400 font-medium uppercase tracking-widest">No parcels waiting</p>
-                </div>
-              )}
-            </div>
-          </div>
-          <MapPlaceholder />
-        </div>
+        ))}
       </div>
     </div>
   );
@@ -953,8 +956,8 @@ const SignupPage = ({ onToggle }: { onToggle: () => void }) => {
       </div>
       <div className="space-y-1">
         <label className="text-xs font-bold text-gray-700 ml-1">Your Primary Role</label>
-        <div className="grid grid-cols-3 gap-2 mt-1">
-          {['passenger', 'driver', 'parcel_user'].map(r => (
+        <div className="grid grid-cols-2 gap-2 mt-1">
+          {['passenger', 'driver', 'sender_parcel', 'pickup_parcel'].map(r => (
             <button 
               key={r}
               type="button"
@@ -1011,7 +1014,9 @@ const AppContent = () => {
       <main className="max-w-7xl mx-auto px-4 py-8">
         {profile.role === 'passenger' && <PassengerDashboard />}
         {profile.role === 'driver' && <DriverDashboard />}
-        {profile.role === 'parcel_user' && <ParcelDashboard />}
+        {profile.role === 'sender_parcel' && <SenderDashboard />}
+        {profile.role === 'pickup_parcel' && <PickupDashboard />}
+        {profile.role === 'parcel_user' as any && <SenderDashboard />}
       </main>
     </div>
   );

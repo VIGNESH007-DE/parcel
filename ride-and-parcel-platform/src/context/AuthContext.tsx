@@ -10,7 +10,7 @@ interface UserProfile {
   gender: string;
   phone: string;
   email: string;
-  role: 'passenger' | 'driver' | 'parcel_user';
+  role: 'passenger' | 'driver' | 'sender_parcel' | 'pickup_parcel';
   createdAt: any;
 }
 
