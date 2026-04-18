@@ -47,6 +47,8 @@ interface Booking {
 interface Parcel {
   id: string;
   senderId: string;
+  senderName?: string;
+  senderPhone?: string;
   driverId?: string;
   pickupLocation: string;
   dropLocation: string;
@@ -636,10 +638,12 @@ const ParcelDashboard = () => {
 
   const addParcel = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user || !profile) return;
     try {
       await addDoc(collection(db, 'parcels'), {
         senderId: user.uid,
+        senderName: profile.name,
+        senderPhone: profile.phone,
         pickupLocation: pLoc,
         dropLocation: dLoc,
         parcelDetails: details,
@@ -662,7 +666,13 @@ const ParcelDashboard = () => {
     } catch (e) { console.error(e); }
   };
 
-  const userParcels = parcels.filter(p => p.senderId === user?.uid || p.driverId === user?.uid);
+  const markDelivered = async (id: string) => {
+    try {
+      await updateDoc(doc(db, 'parcels', id), { status: 'delivered' });
+    } catch (e) { console.error(e); }
+  };
+
+  const userParcels = parcels.filter(p => (p.senderId === user?.uid || p.driverId === user?.uid) && p.status !== 'delivered');
   const availableParcels = parcels.filter(p => p.status === 'pending');
 
   return (
@@ -730,17 +740,38 @@ const ParcelDashboard = () => {
                     <span className="truncate">{p.dropLocation}</span>
                   </div>
                 </div>
-                {p.driverPhone && (
+                {p.driverPhone && p.senderId === user?.uid && (
                   <div className="mt-6 pt-4 border-t border-gray-50 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600">
                         <User className="w-4 h-4" />
                       </div>
-                      <span className="text-xs font-bold text-gray-700">{p.driverName}</span>
+                      <span className="text-xs font-bold text-gray-700">Driver: {p.driverName}</span>
                     </div>
                     <a href={`tel:${p.driverPhone}`} className="text-indigo-600 hover:text-indigo-700">
                       <Phone className="w-5 h-5" />
                     </a>
+                  </div>
+                )}
+                {p.senderPhone && p.driverId === user?.uid && (
+                  <div className="mt-6 pt-4 border-t border-gray-50 flex flex-col gap-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-emerald-50 rounded-lg flex items-center justify-center text-emerald-600">
+                          <User className="w-4 h-4" />
+                        </div>
+                        <span className="text-xs font-bold text-gray-700">Sender: {p.senderName}</span>
+                      </div>
+                      <a href={`tel:${p.senderPhone}`} className="text-emerald-600 hover:text-emerald-700">
+                        <Phone className="w-5 h-5" />
+                      </a>
+                    </div>
+                    <button 
+                      onClick={() => markDelivered(p.id)}
+                      className="w-full bg-emerald-600 text-white py-2 rounded-xl text-xs font-bold hover:bg-emerald-700 transition-all flex items-center justify-center gap-2"
+                    >
+                      <CheckCircle2 className="w-4 h-4" /> Mark as Delivered
+                    </button>
                   </div>
                 )}
               </div>
