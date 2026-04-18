@@ -630,7 +630,7 @@ const SenderDashboard = () => {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, 'pickup_routes'), where('senderId', '==', user.uid));
+    const q = query(collection(db, 'parcels'), where('senderId', '==', user.uid));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setActiveParcels(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PickupRoute)));
     });
@@ -639,7 +639,7 @@ const SenderDashboard = () => {
 
   const searchRoutes = async () => {
     setHasSearched(true);
-    const q = query(collection(db, 'pickup_routes'), where('status', '==', 'active'));
+    const q = query(collection(db, 'parcels'), where('status', '==', 'active'));
     const snapshot = await getDocs(q);
     const results = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PickupRoute));
     if (pickup || drop) {
@@ -656,7 +656,7 @@ const SenderDashboard = () => {
     if (!user || !profile) return;
     if (!parcelDetails) return alert('Please enter parcel details first!');
     try {
-      await updateDoc(doc(db, 'pickup_routes', route.id), {
+      await updateDoc(doc(db, 'parcels', route.id), {
         status: 'booked',
         senderId: user.uid,
         senderName: profile.name,
@@ -739,7 +739,7 @@ const PickupDashboard = () => {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, 'pickup_routes'), where('driverId', '==', user.uid));
+    const q = query(collection(db, 'parcels'), where('driverId', '==', user.uid));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setRoutes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PickupRoute)));
     });
@@ -750,7 +750,7 @@ const PickupDashboard = () => {
     e.preventDefault();
     if (!user || !profile) return;
     try {
-      await addDoc(collection(db, 'pickup_routes'), {
+      await addDoc(collection(db, 'parcels'), {
         driverId: user.uid,
         driverName: profile.name,
         driverPhone: profile.phone,
@@ -758,6 +758,7 @@ const PickupDashboard = () => {
         endLocation: endLoc,
         price,
         status: 'active',
+        createdAt: Timestamp.now()
       });
       setShowAdd(false); setStartLoc(''); setEndLoc('');
     } catch (e) { console.error(e); }
@@ -765,7 +766,7 @@ const PickupDashboard = () => {
 
   const markDelivered = async (id: string) => {
     try {
-      await updateDoc(doc(db, 'pickup_routes', id), { status: 'delivered' });
+      await updateDoc(doc(db, 'parcels', id), { status: 'delivered' });
     } catch (e) { console.error(e); }
   };
 
